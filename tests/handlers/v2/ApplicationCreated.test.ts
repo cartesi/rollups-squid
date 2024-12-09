@@ -1,17 +1,17 @@
 import { sepolia } from 'viem/chains';
 import { beforeEach, describe, expect, test, vi } from 'vitest';
-import ApplicationCreated from '../../src/handlers/ApplicationCreated';
+import ApplicationCreated from '../../../src/handlers/v2/ApplicationCreated';
 import {
     Application,
     ApplicationFactory,
     Chain,
     RollupVersion,
-} from '../../src/model';
-import { generateIDFrom } from '../../src/utils';
-import { mockModelImplementation } from '../stubs/mocks';
-import { block, ctx, logs } from '../stubs/params';
+} from '../../../src/model';
+import { generateIDFrom } from '../../../src/utils';
+import { mockModelImplementation } from '../../stubs/mocks';
+import { block, ctx, logApplicationCreatedV2, logs } from '../../stubs/params';
 
-vi.mock('../../src/model/', async (importOriginal) => {
+vi.mock('../../../src/model/', async (importOriginal) => {
     const actualMods = await importOriginal;
     const Application = vi.fn();
     const ApplicationFactory = vi.fn();
@@ -27,7 +27,7 @@ vi.mock('../../src/model/', async (importOriginal) => {
     };
 });
 
-describe('ApplicationCreated', () => {
+describe('ApplicationCreated v2', () => {
     let applicationCreated: ApplicationCreated;
     const mockFactoryStorage = new Map();
     const mockApplicationStorage = new Map();
@@ -59,7 +59,11 @@ describe('ApplicationCreated', () => {
         });
 
         test('should create an chain object after handling application-created event', async () => {
-            await applicationCreated.handle(logs[1], block, ctx);
+            await applicationCreated.handle(
+                logApplicationCreatedV2,
+                block,
+                ctx,
+            );
 
             expect(mockChainStorage.size).toEqual(1);
             const [chain] = Array.from(mockChainStorage.values());
@@ -68,7 +72,7 @@ describe('ApplicationCreated', () => {
 
         test('should throw error when chain-id information is not available in the Log ', async () => {
             try {
-                const clonedLog = structuredClone(logs[1]);
+                const clonedLog = structuredClone(logApplicationCreatedV2);
                 delete clonedLog.transaction?.chainId;
                 await applicationCreated.handle(clonedLog, block, ctx);
                 expect(true).toEqual('Should not reach that expectation.');
@@ -80,12 +84,21 @@ describe('ApplicationCreated', () => {
         });
 
         test('should create the entities after handling the application-created event', async () => {
-            await applicationCreated.handle(logs[1], block, ctx);
-            const factoryId = generateIDFrom([sepolia.id, logs[1].address]);
+            await applicationCreated.handle(
+                logApplicationCreatedV2,
+                block,
+                ctx,
+            );
+
+            const factoryId = generateIDFrom([
+                sepolia.id,
+                logApplicationCreatedV2.address,
+            ]);
+
             const applicationId = generateIDFrom([
                 sepolia.id,
-                '0x0be010fa7e70d74fa8b6729fe1ae268787298f54',
-                RollupVersion.v1,
+                '0xfb92024ec789bb2fbbc5cd1390386843c5fb7694',
+                RollupVersion.v2,
             ]);
 
             expect(mockFactoryStorage.size).toBe(1);
@@ -98,44 +111,49 @@ describe('ApplicationCreated', () => {
 
             expect(factory).toEqual({
                 id: factoryId,
-                address: logs[1].address,
+                address: logApplicationCreatedV2.address,
                 chain: { id: sepolia.id.toString() },
             });
             expect(application).toEqual({
                 id: applicationId,
-                address: '0x0be010fa7e70d74fa8b6729fe1ae268787298f54',
+                address: '0xfb92024ec789bb2fbbc5cd1390386843c5fb7694',
                 factory: factory,
-                owner: '0x74d093f6911ac080897c3145441103dabb869307',
-                timestamp: 1696281168n,
+                owner: '0x590f92fea8df163fff2d7df266364de7ce8f9e16',
+                timestamp: 1728693996n,
                 chain: { id: sepolia.id.toString() },
-                rollupVersion: 'v1',
+                rollupVersion: 'v2',
             });
         });
 
         test('should set the timestamp in seconds from the block timestamp', async () => {
-            await applicationCreated.handle(logs[1], block, ctx);
+            await applicationCreated.handle(
+                logApplicationCreatedV2,
+                block,
+                ctx,
+            );
             const applicationId = generateIDFrom([
                 sepolia.id,
-                '0x0be010fa7e70d74fa8b6729fe1ae268787298f54',
-                RollupVersion.v1,
+                '0xfb92024ec789bb2fbbc5cd1390386843c5fb7694',
+                RollupVersion.v2,
             ]);
 
-            const timestampInSeconds = BigInt(logs[1].block.timestamp) / 1000n;
+            const timestampInSeconds =
+                BigInt(logApplicationCreatedV2.block.timestamp) / 1000n;
 
             const [application] = Array.from(mockApplicationStorage.values());
 
             expect(application).toEqual({
                 factory: {
-                    id: '11155111-0x7122cd1221c20892234186facfe8615e6743ab02',
-                    address: '0x7122cd1221c20892234186facfe8615e6743ab02',
+                    id: '11155111-0x1d4cfbd2622d802a07ceb4c3401bbb455c9dbdc3',
+                    address: logApplicationCreatedV2.address,
                     chain: { id: sepolia.id.toString() },
                 },
                 id: applicationId,
-                owner: '0x74d093f6911ac080897c3145441103dabb869307',
+                owner: '0x590f92fea8df163fff2d7df266364de7ce8f9e16',
                 timestamp: timestampInSeconds,
-                address: '0x0be010fa7e70d74fa8b6729fe1ae268787298f54',
+                address: '0xfb92024ec789bb2fbbc5cd1390386843c5fb7694',
                 chain: { id: sepolia.id.toString() },
-                rollupVersion: 'v1',
+                rollupVersion: 'v2',
             });
         });
     });

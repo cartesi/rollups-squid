@@ -2,19 +2,21 @@ import { beforeEach, describe, expect, test, vi } from 'vitest';
 
 import { sepolia } from 'viem/chains';
 import OwnerShipTransferred from '../../src/handlers/OwnershipTransferred';
-import { Application, Chain } from '../../src/model';
+import { Application, Chain, RollupVersion } from '../../src/model';
 import { generateIDFrom } from '../../src/utils';
+import { mockModelImplementation } from '../stubs/mocks';
 import { block, ctx, logs } from '../stubs/params';
-import { mockModelImplementation } from '../stubs/utils';
 
 vi.mock('../../src/model/', async (importOriginal) => {
     const actualMods = await importOriginal;
     const Application = vi.fn();
     const Chain = vi.fn();
+    const RollupVersion = { v1: 'v1', v2: 'v2' };
     return {
         ...actualMods!,
         Application,
         Chain,
+        RollupVersion,
     };
 });
 
@@ -45,7 +47,11 @@ describe('ApplicationCreated', () => {
         test('Should transfer the Ownership', async () => {
             const mockApplicationStorage2 = new Map();
             const log = logs[2];
-            const appId = generateIDFrom([sepolia.id, log.transaction?.to]);
+            const appId = generateIDFrom([
+                sepolia.id,
+                log.transaction?.to,
+                RollupVersion.v1,
+            ]);
 
             mockApplicationStorage2.set(appId, {
                 id: appId,

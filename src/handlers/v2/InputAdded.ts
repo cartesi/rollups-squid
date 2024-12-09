@@ -1,16 +1,10 @@
 import { DataHandlerContext } from '@subsquid/evm-processor';
 import { Store } from '@subsquid/typeorm-store';
 import { AbiCoder, dataSlice, getUint } from 'ethers';
-import { Contract as ERC20 } from '../abi/ERC20';
-import { Contract as ERC721 } from '../abi/ERC721';
-import { events } from '../abi/InputBox';
-import {
-    ERC1155BatchPortalAddress,
-    ERC1155SinglePortalAddress,
-    ERC20PortalAddress,
-    ERC721PortalAddress,
-    InputBoxAddress,
-} from '../config';
+import { Contract as ERC20 } from '../../abi/ERC20';
+import { Contract as ERC721 } from '../../abi/ERC721';
+import { events } from '../../abi/InputBoxV2';
+import { RollupsAddressBook } from '../../config';
 import {
     Application,
     Chain,
@@ -23,11 +17,13 @@ import {
     NFT,
     RollupVersion,
     Token,
-} from '../model';
-import { BlockData, Log } from '../processor';
+} from '../../model';
+import { BlockData, Log } from '../../processor';
 
-import { generateIDFrom } from '../utils';
-import Handler from './Handler';
+import { Hex } from 'viem';
+import decodeEvmAdvance from '../../decoders/evmAdvance';
+import { generateIDFrom } from '../../utils';
+import Handler from '../Handler';
 
 const logErrorAndReturnNull =
     (ctx: DataHandlerContext<Store>) => (reason: any) => {
@@ -56,14 +52,14 @@ export default class InputAdded implements Handler {
             chain: Chain;
         },
     ) {
-        if (input.msgSender !== ERC20PortalAddress) return undefined;
+        if (input.msgSender !== RollupsAddressBook.v2.ERC20Portal)
+            return undefined;
 
         const chain = opts.chain;
 
-        // first byte is a boolean and it is not used here at the moment
-        const tokenAddress = dataSlice(input.payload, 1, 21).toLowerCase(); // 20 bytes for address
-        const from = dataSlice(input.payload, 21, 41).toLowerCase(); // 20 bytes for address
-        const amount = getUint(dataSlice(input.payload, 41, 73)); // 32 bytes for uint256
+        const tokenAddress = dataSlice(input.payload, 0, 20).toLowerCase(); // 20 bytes for address
+        const from = dataSlice(input.payload, 20, 40).toLowerCase(); // 20 bytes for address
+        const amount = getUint(dataSlice(input.payload, 40, 72)); // 32 bytes for uint256
         const tokenId = generateIDFrom([chain.id, tokenAddress]);
 
         let token = this.tokenStorage.get(tokenId) as Token;
@@ -106,7 +102,8 @@ export default class InputAdded implements Handler {
             chain: Chain;
         },
     ) {
-        if (input.msgSender !== ERC721PortalAddress) return undefined;
+        if (input.msgSender !== RollupsAddressBook.v2.ERC721Portal)
+            return undefined;
 
         const chain = opts.chain;
 
@@ -158,9 +155,12 @@ export default class InputAdded implements Handler {
             chain: Chain;
         },
     ) {
+        const { ERC1155BatchPortal, ERC1155SinglePortal } =
+            RollupsAddressBook.v2;
+
         if (
-            input.msgSender !== ERC1155BatchPortalAddress &&
-            input.msgSender !== ERC1155SinglePortalAddress
+            input.msgSender !== ERC1155BatchPortal &&
+            input.msgSender !== ERC1155SinglePortal
         )
             return undefined;
 
@@ -171,7 +171,7 @@ export default class InputAdded implements Handler {
         const tokenId = generateIDFrom([chain.id, tokenAddress]);
         let transfers: Erc1155Transfer[] = [];
 
-        if (input.msgSender === ERC1155BatchPortalAddress) {
+        if (input.msgSender === ERC1155BatchPortal) {
             ctx.log.info(`${input.id} (ERC-1155) batch deposit`);
             const data = dataSlice(input.payload, 40); // Data arbitrary size
             const [tokenIds, amounts] = new AbiCoder().decode(
@@ -182,7 +182,7 @@ export default class InputAdded implements Handler {
                 (tokenIndex: bigint, idx: number) =>
                     new Erc1155Transfer({ tokenIndex, amount: amounts[idx] }),
             );
-        } else if (input.msgSender === ERC1155SinglePortalAddress) {
+        } else if (input.msgSender === ERC1155SinglePortal) {
             ctx.log.info(`${input.id} (ERC-1155) single deposit`);
             const tokenIndex = getUint(dataSlice(input.payload, 40, 72)); // 32 bytes for tokenId
             const amount = getUint(dataSlice(input.payload, 72, 104)); // 32 bytes for value a.k.a amount
@@ -217,7 +217,7 @@ export default class InputAdded implements Handler {
 
     async handle(log: Log, block: BlockData, ctx: DataHandlerContext<Store>) {
         if (
-            log.address === InputBoxAddress &&
+            log.address === RollupsAddressBook.v2.InputBox &&
             log.topics[0] === events.InputAdded.topic
         ) {
             if (!log.transaction?.chainId)
@@ -234,38 +234,42 @@ export default class InputAdded implements Handler {
 
             const timestamp = BigInt(log.block.timestamp);
             const event = events.InputAdded.decode(log);
-            const dappAddress = event.dapp.toLowerCase();
-            const dappId = generateIDFrom([
+            const { appContract, msgSender, payload, index } = decodeEvmAdvance(
+                event.input as Hex,
+            );
+            const appAddress = appContract.toLowerCase();
+            const appId = generateIDFrom([
                 chain.id,
-                dappAddress,
-                RollupVersion.v1,
+                appAddress,
+                RollupVersion.v2,
             ]);
+
             const timestampInSeconds = timestamp / 1000n;
 
             let application =
-                this.applicationStorage.get(dappId) ??
-                (await ctx.store.get(Application, dappId));
+                this.applicationStorage.get(appId) ??
+                (await ctx.store.get(Application, appId));
             if (!application) {
-                ctx.log.warn(`${dappId} (Application) not found`);
+                ctx.log.warn(`${appId} (Application v2) not found`);
                 application = new Application({
-                    id: dappId,
+                    id: appId,
                     timestamp: timestampInSeconds,
                     chain: chain,
-                    address: dappAddress,
-                    rollupVersion: RollupVersion.v1,
+                    address: appAddress,
+                    rollupVersion: RollupVersion.v2,
                 });
-                this.applicationStorage.set(dappId, application);
-                ctx.log.info(`${dappId} (Application) stored`);
+                this.applicationStorage.set(appId, application);
+                ctx.log.info(`${appId} (Application v2) stored`);
             }
 
-            const inputId = generateIDFrom([dappId, event.inboxInputIndex]);
+            const inputId = generateIDFrom([appId, index]);
 
             const input = new Input({
                 id: inputId,
                 application,
-                index: Number(event.inboxInputIndex),
-                msgSender: event.sender.toLowerCase(),
-                payload: event.input,
+                index: Number(event.index),
+                msgSender: msgSender.toLowerCase(),
+                payload: payload,
                 timestamp: timestampInSeconds,
                 blockNumber: BigInt(log.block.height),
                 blockHash: log.block.hash,

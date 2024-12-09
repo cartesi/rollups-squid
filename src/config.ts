@@ -1,3 +1,6 @@
+import CartesiApplicationFactorySepolia from '@cartesi/rollups-v2/deployments/sepolia/ApplicationFactory.json';
+import InputBoxV2Sepolia from '@cartesi/rollups-v2/deployments/sepolia/InputBox.json';
+import rollupsV2Sepolia from '@cartesi/rollups-v2/export/abi/sepolia.json';
 import CartesiDAppFactoryArbitrum from '@cartesi/rollups/deployments/arbitrum/CartesiDAppFactory.json';
 import InputBoxArbitrum from '@cartesi/rollups/deployments/arbitrum/InputBox.json';
 import CartesiDAppFactoryArbitrumSepolia from '@cartesi/rollups/deployments/arbitrum_sepolia/CartesiDAppFactory.json';
@@ -16,6 +19,7 @@ import CartesiDAppFactorySepolia from '@cartesi/rollups/deployments/sepolia/Cart
 import InputBoxSepolia from '@cartesi/rollups/deployments/sepolia/InputBox.json';
 import rollupsMainnet from '@cartesi/rollups/export/abi/mainnet.json';
 import { GatewaySettings, RpcEndpointSettings } from '@subsquid/evm-processor';
+import { Hex } from 'viem';
 import {
     arbitrum,
     arbitrumSepolia,
@@ -29,6 +33,27 @@ import {
 } from 'viem/chains';
 import { archiveNodes } from './gateways';
 import { parseIntOr } from './utils';
+
+// addresses from rollups-v2. (Probably) the addresses will be the same on all chains
+const { contracts } = rollupsV2Sepolia;
+
+type RollupContractName = keyof typeof contracts;
+type ContractAddress = { [k in RollupContractName]: Hex };
+
+const v2 = Object.entries(contracts).reduce(
+    (prev, [name, value]): ContractAddress => ({
+        ...prev,
+        [name]: value.address.toLowerCase(),
+    }),
+    {} as ContractAddress,
+);
+
+/**
+ * Rollups contracts address by version.
+ */
+export const RollupsAddressBook = {
+    v2,
+} as const;
 
 // addresses are the same on all chains
 export const CartesiDAppFactoryAddress =
@@ -58,6 +83,9 @@ export type ProcessorConfig = {
     dataSource: DataSources;
     from: number;
     finalityConfirmation?: number;
+    v2?: {
+        from: number;
+    };
 };
 
 const FINALITY_CONFIRMATION = 10 as const;
@@ -111,6 +139,12 @@ export const getConfig = (chainId: number): ProcessorConfig => {
                     defaultVal: FINALITY_CONFIRMATION,
                     value: process.env[BLOCK_CONFIRMATIONS],
                 }),
+                v2: {
+                    from: Math.min(
+                        CartesiApplicationFactorySepolia.receipt.blockNumber,
+                        InputBoxV2Sepolia.receipt.blockNumber,
+                    ),
+                },
             };
         case optimism.id:
             return {
@@ -246,6 +280,12 @@ export const getConfig = (chainId: number): ProcessorConfig => {
                     defaultVal: 1,
                     value: process.env[BLOCK_CONFIRMATIONS],
                 }),
+                v2: {
+                    from: parseIntOr({
+                        defaultVal: LOCAL_GENESIS_BLOCK,
+                        value: process.env[GENESIS_BLOCK],
+                    }),
+                },
             };
         default:
             throw new Error(`Unsupported chainId: ${chainId}`);

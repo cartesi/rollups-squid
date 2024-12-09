@@ -8,10 +8,18 @@ import {
     CartesiDAppFactoryAddress,
     ERC20PortalAddress,
     InputBoxAddress,
+    RollupsAddressBook,
 } from '../../src/config';
-import { Input } from '../../src/model';
+import { Input, RollupVersion } from '../../src/model';
 import { BlockData, Log } from '../../src/processor';
 import { generateIDFrom } from '../../src/utils';
+import {
+    buildInputAddedLogData,
+    encodeErc1155BatchInput,
+    encodeErc1155SingleInput,
+    encodeErc20PortalInput,
+    encodeErc721PortalInput,
+} from './utils';
 
 vi.mock('@subsquid/logger', async (importOriginal) => {
     const actualMods = await importOriginal;
@@ -53,6 +61,8 @@ export const input = {
         chain: {
             id: sepolia.id.toString(),
         },
+        address: '0x60a7048c3136293071605a4eaffef49923e981cc',
+        rollupVersion: RollupVersion.v1,
     },
     index: 1,
     msgSender: ERC20PortalAddress,
@@ -67,6 +77,156 @@ export const input = {
     transactionHash:
         '0x6a3d76983453c0f74188bd89e01576c35f9d9b02daecdd49f7171aeb2bd3dc78',
 } satisfies Input;
+
+export const logApplicationCreatedV2: Log = {
+    id: '0006859373-c8732-000014',
+    logIndex: 14,
+    transactionIndex: 10,
+    address: '0x1d4cfbd2622d802a07ceb4c3401bbb455c9dbdc3',
+    data: '0x000000000000000000000000590f92fea8df163fff2d7df266364de7ce8f9e169f24c52e0fcd1ac696d00405c3bd5adc558c48936919ac5ab3718fcb7d70f93f000000000000000000000000fb92024ec789bb2fbbc5cd1390386843c5fb7694',
+    topics: [
+        '0xe73165c2d277daf8713fd08b40845cb6bb7a20b2b543f3d35324a475660fcebd',
+        '0x0000000000000000000000004821e772f7e84abd6cfd63cdb3ca098807d8ee0a',
+    ],
+    // @ts-ignore
+    block: {
+        id: '0006859373-c8732',
+        height: 6859373,
+        hash: '0xc8732c84ececbcf7a96881cd7ec30e3409e6ba66404b2ebd89e271517c399d8d',
+        parentHash:
+            '0x04aab6d11d9cb2c00b33b37612a34137bb9e1d3c26d8ef1fd0f9dddd6cd2b471',
+        timestamp: 1728693996000,
+    },
+    // @ts-ignore
+    transaction: {
+        id: '0006859373-c8732-000010',
+        transactionIndex: 10,
+        hash: '0x3fa0363695c48298965949aab43b49299559254977908ce696506c00c1f6a75c',
+        from: '0x590f92fea8df163fff2d7df266364de7ce8f9e16',
+        to: '0x4c11c7f82d6d56a726f9b53dd99af031afd86bb6',
+        value: 0n,
+        chainId: 11155111,
+    },
+};
+
+export const logInputAddedV2: Log = {
+    id: '0006859416-fd6ca-000028',
+    logIndex: 28,
+    transactionIndex: 15,
+    address: '0x593e5bcf894d6829dd26d0810da7f064406aebb6',
+    data: '0x00000000000000000000000000000000000000000000000000000000000000200000000000000000000000000000000000000000000000000000000000000144415bf3630000000000000000000000000000000000000000000000000000000000aa36a7000000000000000000000000fb92024ec789bb2fbbc5cd1390386843c5fb7694000000000000000000000000590f92fea8df163fff2d7df266364de7ce8f9e16000000000000000000000000000000000000000000000000000000000068aa98000000000000000000000000000000000000000000000000000000006709c980094a6affe3aa787280fbdf0a19cdb161b26afdd58fd2672c4615c07ced7f351d000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000001000000000000000000000000000000000000000000000000000000000000000002bb1100000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000',
+    topics: [
+        '0xc05d337121a6e8605c6ec0b72aa29c4210ffe6e5b9cefdd6a7058188a8f66f98',
+        '0x000000000000000000000000fb92024ec789bb2fbbc5cd1390386843c5fb7694',
+        '0x0000000000000000000000000000000000000000000000000000000000000000',
+    ],
+    //@ts-ignore
+    block: {
+        id: '0006859416-fd6ca',
+        height: 6859416,
+        hash: '0xfd6ca8df8f19efebb7fea47c9697c37504c2da623039ef928d48a2f547613bd9',
+        parentHash:
+            '0x1642b6306abb197f45b916aeee19659ed2feb132b2c4d9a0bda89c5e7ff6629a',
+        timestamp: 1728694656000,
+    },
+    // @ts-ignore
+    transaction: {
+        id: '0006859416-fd6ca-000015',
+        transactionIndex: 15,
+        hash: '0x0449bc3dcc0f0cdcbd5674823d0102eefd54c1803f0ae6c1812e73bd26d2a4c9',
+        from: '0x590f92fea8df163fff2d7df266364de7ce8f9e16',
+        to: '0x593e5bcf894d6829dd26d0810da7f064406aebb6',
+        value: 0n,
+        chainId: 11155111,
+    },
+};
+
+const fromAddress = '0xf9e958241c1ca380cfcd50170ec43974bded0bff';
+
+export const logErc20TransferV2: Log = {
+    ...logInputAddedV2,
+    topics: [
+        logInputAddedV2.topics[0],
+        encodeAbiParameters([{ type: 'address' }], [dappAddress]),
+        encodeAbiParameters([{ type: 'uint256' }], [10n]),
+    ],
+    data: buildInputAddedLogData({
+        appContract: dappAddress,
+        index: 10n,
+        msgSender: RollupsAddressBook.v2.ERC20Portal,
+        payload: encodeErc20PortalInput({
+            token: '0x813ae0539daf858599a1b2a7083380542a7b1bb5',
+            sender: fromAddress,
+            amount: 111000000000000000n,
+            execLayerData: '0x',
+        }),
+    }),
+};
+
+export const logErc721TransferV2: Log = {
+    ...logInputAddedV2,
+    topics: [
+        logInputAddedV2.topics[0],
+        encodeAbiParameters([{ type: 'address' }], [dappAddress]),
+        encodeAbiParameters([{ type: 'uint256' }], [10n]),
+    ],
+    data: buildInputAddedLogData({
+        appContract: dappAddress,
+        index: 1n,
+        msgSender: RollupsAddressBook.v2.ERC721Portal,
+        payload: encodeErc721PortalInput({
+            token: '0x7a3cc9c0408887a030a0354330c36a9cd681aa7e',
+            tokenId: 1n,
+            sender: '0xa074683b5be015f053b5dceb064c41fc9d11b6e5',
+            baseLayerData: '0x',
+            execLayerData: '0x',
+        }),
+    }),
+};
+
+export const logErc1155SingleTransferV2: Log = {
+    ...logInputAddedV2,
+    topics: [
+        logInputAddedV2.topics[0],
+        encodeAbiParameters([{ type: 'address' }], [dappAddress]),
+        encodeAbiParameters([{ type: 'uint256' }], [2n]),
+    ],
+    data: buildInputAddedLogData({
+        appContract: dappAddress,
+        index: 2n,
+        msgSender: RollupsAddressBook.v2.ERC1155SinglePortal,
+        payload: encodeErc1155SingleInput({
+            token: '0x2960f4db2b0993ae5b59bc4a0f5ec7a1767e905e',
+            sender: '0xa074683b5be015f053b5dceb064c41fc9d11b6e5',
+            tokenId: 0n,
+            value: 100n,
+            baseLayerData: '0x',
+            execLayerData: '0x',
+        }),
+    }),
+};
+
+export const logErc1155BatchTransferV2: Log = {
+    ...logInputAddedV2,
+    topics: [
+        logInputAddedV2.topics[0],
+        encodeAbiParameters([{ type: 'address' }], [dappAddress]),
+        encodeAbiParameters([{ type: 'uint256' }], [2n]),
+    ],
+    data: buildInputAddedLogData({
+        appContract: dappAddress,
+        index: 2n,
+        msgSender: RollupsAddressBook.v2.ERC1155BatchPortal,
+        payload: encodeErc1155BatchInput({
+            token: '0x2960f4db2b0993ae5b59bc4a0f5ec7a1767e905e',
+            sender: '0xa074683b5be015f053b5dceb064c41fc9d11b6e5',
+            tokenIds: [1n, 2n],
+            values: [100n, 200n],
+            baseLayerData: '0x',
+            execLayerData: '0x',
+        }),
+    }),
+};
 
 export const logErc721Transfer: Log = {
     id: '0004867730-000035-2c78f',

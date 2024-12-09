@@ -1,11 +1,16 @@
 import { EvmBatchProcessor } from '@subsquid/evm-processor';
 import { Database, LocalDest } from '@subsquid/file-store';
 import { createLogger } from '@subsquid/logger';
+import { events as CartesiApplicationFactory } from '../src/abi/CartesiApplicationFactory';
 import {
     events as CartesiDAppFactory,
     events,
 } from '../src/abi/CartesiDAppFactory';
-import { CartesiDAppFactoryAddress, getConfig } from '../src/config';
+import {
+    CartesiDAppFactoryAddress,
+    getConfig,
+    RollupsAddressBook,
+} from '../src/config';
 
 type Metadata = {
     height: number;
@@ -24,10 +29,11 @@ if (!process.env.CHAIN_ID) {
 
 const chainId = parseInt(process.env.CHAIN_ID ?? 0);
 const config = getConfig(chainId);
+const supportV2 = config.v2 !== undefined && config.v2 !== null;
 
-logger.info(`Processing chain_id: ${chainId}`);
+logger.info(`Processing chainId: ${chainId}`);
 
-const processor = new EvmBatchProcessor()
+let processor = new EvmBatchProcessor()
     .setGateway(config.dataSource.archive!)
     .setRpcDataIngestionSettings({ disabled: true })
     .setFinalityConfirmation(config.finalityConfirmation ?? 10)
@@ -44,8 +50,16 @@ const processor = new EvmBatchProcessor()
         topic0: [CartesiDAppFactory.ApplicationCreated.topic],
     });
 
+if (supportV2) {
+    processor = processor.addLog({
+        address: [RollupsAddressBook.v2.ApplicationFactory],
+        topic0: [CartesiApplicationFactory.ApplicationCreated.topic],
+    });
+}
+
 const appFilename = `applications-${chainId}.json` as const;
 
+let appsByFactoryAddress: Record<string, string[]> = {};
 let applications: string[] = [];
 let isInit = false;
 
@@ -61,7 +75,7 @@ const database = new Database({
                     .then(JSON.parse);
 
                 if (!isInit) {
-                    applications = addresses[CartesiDAppFactoryAddress];
+                    appsByFactoryAddress = addresses;
                     isInit = true;
                 }
 
@@ -74,7 +88,7 @@ const database = new Database({
             let metadata: Metadata = {
                 ...info,
                 addresses: {
-                    [CartesiDAppFactoryAddress]: applications,
+                    ...appsByFactoryAddress,
                 },
             };
 
@@ -82,6 +96,16 @@ const database = new Database({
         },
     },
 });
+
+const addAppAddressFor = (factoryAddress: string, appAddress: string) => {
+    const id = appAddress.toLowerCase();
+    const list = appsByFactoryAddress[factoryAddress] ?? [];
+
+    list.push(id);
+    appsByFactoryAddress[factoryAddress] = list;
+};
+
+const ApplicationFactoryAddress = RollupsAddressBook.v2.ApplicationFactory;
 
 processor.run(database, async (ctx) => {
     for (const block of ctx.blocks) {
@@ -91,10 +115,19 @@ processor.run(database, async (ctx) => {
                 log.topics[0] === events.ApplicationCreated.topic
             ) {
                 const { application } = events.ApplicationCreated.decode(log);
-                const id = application.toLowerCase();
+                addAppAddressFor(CartesiDAppFactoryAddress, application);
+                ctx.log.info(`${application} (Application v1) preloaded`);
+            } else if (
+                log.address === ApplicationFactoryAddress &&
+                log.topics[0] ===
+                    CartesiApplicationFactory.ApplicationCreated.topic
+            ) {
+                const { appContract } =
+                    CartesiApplicationFactory.ApplicationCreated.decode(log);
 
-                applications.push(id);
-                ctx.log.info(`${id} (Application) preloaded`);
+                addAppAddressFor(ApplicationFactoryAddress, appContract);
+
+                ctx.log.info(`${appContract} (Application v2) preloaded`);
             }
         }
     }

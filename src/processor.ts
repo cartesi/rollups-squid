@@ -7,12 +7,15 @@ import {
     Log as _Log,
     Transaction as _Transaction,
 } from '@subsquid/evm-processor';
+import { events as CartesiApplicationFactory } from './abi/CartesiApplicationFactory';
 import { events as CartesiDApp } from './abi/CartesiDApp';
 import { events as CartesiDAppFactory } from './abi/CartesiDAppFactory';
 import { events as InputBox } from './abi/InputBox';
+import { events as InputBoxV2 } from './abi/InputBoxV2';
 import {
     CartesiDAppFactoryAddress,
     InputBoxAddress,
+    RollupsAddressBook,
     getConfig,
 } from './config';
 import { loadApplications } from './utils';
@@ -48,6 +51,21 @@ export const createProcessor = (chainId: number) => {
             transaction: true,
         });
 
+    if (config.v2) {
+        processor = processor
+            .addLog({
+                address: [RollupsAddressBook.v2.ApplicationFactory],
+                range: { from: config.v2.from },
+                topic0: [CartesiApplicationFactory.ApplicationCreated.topic],
+            })
+            .addLog({
+                address: [RollupsAddressBook.v2.InputBox],
+                range: { from: config.v2.from },
+                topic0: [InputBoxV2.InputAdded.topic],
+                transaction: true,
+            });
+    }
+
     processor = config.dataSource.archive
         ? processor.setGateway(config.dataSource.archive)
         : processor;
@@ -57,10 +75,18 @@ export const createProcessor = (chainId: number) => {
         : processor;
 
     if (applicationMetadata !== null) {
+        const dappFactoryAddresses =
+            applicationMetadata.addresses[CartesiDAppFactoryAddress];
+        const appFactoryAddresses =
+            (config.v2 &&
+                applicationMetadata.addresses[
+                    RollupsAddressBook.v2.ApplicationFactory
+                ]) ??
+            [];
+
         processor = processor
             .addLog({
-                address:
-                    applicationMetadata.addresses[CartesiDAppFactoryAddress],
+                address: [...dappFactoryAddresses, ...appFactoryAddresses],
                 topic0: [CartesiDApp.OwnershipTransferred.topic],
                 range: { from: config.from, to: applicationMetadata.height },
                 transaction: true,

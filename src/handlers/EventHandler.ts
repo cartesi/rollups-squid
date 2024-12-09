@@ -16,6 +16,8 @@ import ApplicationCreated from './ApplicationCreated';
 import Handler from './Handler';
 import InputAdded from './InputAdded';
 import OwnershipTransferred from './OwnershipTransferred';
+import ApplicationCreatedV2 from './v2/ApplicationCreated';
+import InputAddedV2 from './v2/InputAdded';
 
 export default class EventHandler {
     private readonly tokens: Map<string, Token>;
@@ -31,6 +33,8 @@ export default class EventHandler {
     private readonly applicationCreated: Handler;
     private readonly inputAdded: Handler;
     private readonly ownershipTransferred: Handler;
+    private readonly applicationCreatedV2: Handler;
+    private readonly inputAddedV2: Handler;
 
     constructor() {
         this.tokens = new Map();
@@ -65,12 +69,34 @@ export default class EventHandler {
             this.applications,
             this.chains,
         );
+
+        this.applicationCreatedV2 = new ApplicationCreatedV2(
+            this.factories,
+            this.applications,
+            this.chains,
+        );
+
+        this.inputAddedV2 = new InputAddedV2(
+            this.tokens,
+            this.deposits,
+            this.applications,
+            this.inputs,
+            this.nfts,
+            this.erc721Deposits,
+            this.multiTokens,
+            this.erc1155Deposits,
+            this.chains,
+        );
     }
 
     async handle(log: Log, block: BlockData, ctx: ProcessorContext<Store>) {
         await this.applicationCreated.handle(log, block, ctx);
         await this.inputAdded.handle(log, block, ctx);
         await this.ownershipTransferred.handle(log, block, ctx);
+
+        await this.applicationCreatedV2.handle(log, block, ctx);
+        await this.inputAddedV2.handle(log, block, ctx);
+
         return true;
     }
 

@@ -2,6 +2,11 @@ type Chain @entity @cardinality(value: 10) {
     id: ID! # network chain id e.g. 111555111
 }
 
+enum RollupVersion {
+    v1
+    v2
+}
+
 type ApplicationFactory @entity @cardinality(value: 5) {
     id: ID! # chainId+address
     applications: [Application!] @derivedFrom(field: "factory")
@@ -20,6 +25,7 @@ type Application
     factory: ApplicationFactory
     inputs: [Input!] @derivedFrom(field: "application")
     chain: Chain! @index
+    rollupVersion: RollupVersion! @index
 }
 
 type Token

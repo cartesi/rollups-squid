@@ -1,16 +1,16 @@
 import { DataHandlerContext } from '@subsquid/evm-processor';
 import { Store } from '@subsquid/typeorm-store';
-import { events } from '../abi/CartesiDAppFactory';
-import { CartesiDAppFactoryAddress } from '../config';
+import { events } from '../../abi/CartesiApplicationFactory';
+import { RollupsAddressBook } from '../../config';
 import {
     Application,
     ApplicationFactory,
     Chain,
     RollupVersion,
-} from '../model';
-import { BlockData, Log } from '../processor';
-import { generateIDFrom } from '../utils';
-import Handler from './Handler';
+} from '../../model';
+import { BlockData, Log } from '../../processor';
+import { generateIDFrom } from '../../utils';
+import Handler from '../Handler';
 
 export default class ApplicationCreated implements Handler {
     constructor(
@@ -21,7 +21,7 @@ export default class ApplicationCreated implements Handler {
 
     async handle(log: Log, _block: BlockData, ctx: DataHandlerContext<Store>) {
         if (
-            log.address === CartesiDAppFactoryAddress &&
+            log.address === RollupsAddressBook.v2.ApplicationFactory &&
             log.topics[0] === events.ApplicationCreated.topic
         ) {
             if (!log.transaction?.chainId)
@@ -37,7 +37,7 @@ export default class ApplicationCreated implements Handler {
 
             this.chainStorage.set(chain.id, chain);
             // decode event
-            const { application, dappOwner } =
+            const { appContract, appOwner } =
                 events.ApplicationCreated.decode(log);
 
             // "create" factory
@@ -48,27 +48,27 @@ export default class ApplicationCreated implements Handler {
             });
 
             this.factoryStorage.set(factory.id, factory);
-            ctx.log.info(`${factory.id} (Factory) stored`);
+            ctx.log.info(`${factory.id} (Factory v2) stored`);
 
             // create application
             const id = generateIDFrom([
                 chain.id,
-                application.toLowerCase(),
-                RollupVersion.v1,
+                appContract.toLowerCase(),
+                RollupVersion.v2,
             ]);
 
             const app = new Application({
                 id,
                 factory,
-                owner: dappOwner.toLowerCase(),
+                owner: appOwner.toLowerCase(),
                 timestamp: timestamp / 1000n,
-                address: application.toLowerCase(),
+                address: appContract.toLowerCase(),
                 chain,
-                rollupVersion: RollupVersion.v1,
+                rollupVersion: RollupVersion.v2,
             });
 
             this.applicationStorage.set(id, app);
-            ctx.log.info(`${id} (Application) stored`);
+            ctx.log.info(`${id} (Application v2) stored`);
         }
 
         return true;
